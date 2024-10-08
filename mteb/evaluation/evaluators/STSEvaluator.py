@@ -46,10 +46,10 @@ class STSEvaluator(Evaluator):
         encode_kwargs: dict[str, Any] = {},
     ):
         embeddings1 = model_encode(
-            self.sentences1, model=model, task_name=self.task_name, **encode_kwargs
+            self.sentences1, model=model, prompt_name=self.task_name, **encode_kwargs
         )
         embeddings2 = model_encode(
-            self.sentences2, model=model, task_name=self.task_name, **encode_kwargs
+            self.sentences2, model=model, prompt_name=self.task_name, **encode_kwargs
         )
 
         logger.info("Evaluating...")
@@ -77,13 +77,30 @@ class STSEvaluator(Evaluator):
             similarity_scores = np.array(_similarity_scores)
 
         if similarity_scores is not None:
-            pearson, _ = pearsonr(self.gold_scores, similarity_scores)
-            spearman, _ = spearmanr(self.gold_scores, similarity_scores)
+            pearson = pearsonr(self.gold_scores, similarity_scores)
+            spearman = spearmanr(self.gold_scores, similarity_scores)
         else:
             # if model does not have a similarity function, we assume the cosine similarity
             pearson = cosine_pearson
             spearman = cosine_spearman
 
+        if hasattr(model, "explain"):
+            all_cognitive_loads = []
+                
+            for i in range(len(embeddings1)):
+                emb1 = embeddings1[i]
+                emb2 = embeddings2[i]
+                
+                cognitive_load = model.explain(emb1, emb2, num_explanations=100, verbose=False)
+                
+                assert type(cognitive_load) == int
+                all_cognitive_loads.append(cognitive_load)
+            
+            # average cognitive load
+            avg_cognitive_load = sum(all_cognitive_loads) / len(all_cognitive_loads)
+        else:
+            avg_cognitive_load = None
+        
         return {
             # using the models own similarity score
             "pearson": pearson,
@@ -95,4 +112,5 @@ class STSEvaluator(Evaluator):
             "manhattan_spearman": manhatten_spearman,
             "euclidean_pearson": euclidean_pearson,
             "euclidean_spearman": euclidean_spearman,
+            "avg_cognitive_load": avg_cognitive_load,
         }
